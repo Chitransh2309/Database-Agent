@@ -1,13 +1,16 @@
 import React from 'react';
 //import Button from './templatebtn';
 import Button1 from './getstartedbtn';
+import Button from './templatebtn';
 
 const Herosection = () => {
   return (
     <div id="heroSec">
-      {/* <Button/> */}
-      <p className='my-5' id='herotext' style={{ marginLeft: 250}}> <br />Smart, Simple, <br /> and Seamless PDF Management at <br /> Your Fingertips!</p>
-      <Button1/>
+      <Button/>
+      <p id='herotext' style={{ marginLeft: 250,marginTop: 70}}>Transform your <br />words into powerful SQL queries — insert, update, and fetch<br/> data effortlessly.</p>
+      <div className='btn-div'>
+        <Button1/>
+      </div>
     </div>
   );
 }

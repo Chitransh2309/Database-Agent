@@ -8,7 +8,13 @@ export class About extends Component {
         <div className="container">
           <div className="box">
             <div>
-              <p className='my-1 mx-3'>At PDFGenie, we are dedicated to making PDF management smarter, faster, and more intuitive. Our platform is built to handle a variety of PDF tasks effortlessly, ensuring that you can modify your documents with precision and ease. Whether you're compressing files to save space, redacting sensitive information, or flattening PDFs for security, PDFGenie streamlines the process to keep your workflow smooth and efficient. What makes PDFGenie stand out is our focus on simplicity, security, and accessibility. There are no hidden fees or complicated steps—just a seamless experience designed for everyone. With no sign-ups required, you can instantly edit, optimize, and protect your PDFs, so you can focus on what truly matters.</p>
+              <p className='my-1 mx-3'>SayQL is an intelligent platform that transforms natural language into SQL — empowering users to interact with databases without ever writing a single query.
+Whether you're a developer, analyst, or someone new to databases, SayQL helps you “say” what you need and get instant results.
+ Understand plain English instructions and generate accurate SQL queries.
+ Execute those queries directly on a live database and return real-time results.
+ Automatically generate dynamic forms from your SQL table schemas — including support for constraints, validations, enums, and relationships.
+ Help teams prototype, analyze, and visualize data faster — with no manual SQL writing required.
+</p>
             </div>
           </div>
         </div>

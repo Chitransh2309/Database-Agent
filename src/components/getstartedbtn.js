@@ -7,7 +7,7 @@ const Button1 = () => {
     <StyledWrapper>
       <Link to='/upload'>
         <button className="button my-3" style={{marginLeft:260}}>
-            Get Started
+            Generate Form
         </button>
       </Link>
     </StyledWrapper>

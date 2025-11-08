@@ -11,7 +11,7 @@ import {
 import Upload from './components/Upload'
 import Contact from './components/Contact'
 import Navbar from './components/Navbar';
-import Footer from './components/Footer';
+import { Toaster } from 'react-hot-toast';
 
 export default class App extends Component {
   render() {
@@ -25,11 +25,12 @@ export default class App extends Component {
               <div style={{flex:4}}><Herosection/></div>
               <div style={{flex:3}}><Robot/></div>
             </div>}/>
-            <Route exact path ="/upload" element={<Upload/>}/>
+            <Route exact path ="/upload" element={<Upload mode={0}/>}/>
             <Route exact path ="/contact" element={<Contact/>}/>
+            <Route exact path ="/execute-query" element={<Upload mode={1}/>}/>
           </Routes>
-          <Footer/>
         </Router>
+        <Toaster />
       </div>
     )
   }

@@ -1,377 +1,450 @@
-import React, { useState, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
 import styled from "styled-components";
-import { X, FileText, Archive } from "lucide-react"; // Importing File Icons
-import Footer from "./Footer";
+import SearchButton from "./searchBtn";
+import { useState } from "react";
+import { FaArrowLeft } from "react-icons/fa";
 import Loader from "./Loader";
+import toast from "react-hot-toast";
 
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 90vh;
-  gap: 100px;
-`;
-
-const Heading = styled.h1`
-  font-size: 70px;
-  color: white;
-  text-align: center;
-  font-weight: bold;
-  margin-top: -50px;
-`;
-
-const ContentWrapper = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 50px;
-  margin-top: -20px;
-`;
-
-const FileUploadContainer = styled.div`
-  width: 450px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
-const FileUploadBox = styled.div`
-  border: 3px dashed #b8bcbf;
-  border-radius: 15px;
-  padding: 40px;
-  text-align: center;
-  background-color: rgba(9, 9, 9, 0.963);
-  transition: background-color 0.3s ease-in-out;
-  cursor: pointer;
-  font-size: 20px;
-  font-weight: bold;
-  color: white;
-
-  &.dragover {
-    background-color: #007bff;
-    color: white;
-  }
-`;
-
-const PreviewWrapper = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-`;
-
-const PreviewFileContainer = styled.div`
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-`;
-
-const RemoveButton = styled.button`
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  background: red;
-  border: none;
-  color: white;
-  border-radius: 50%;
-  width: 25px;
-  height: 25px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 16px;
-  transition: 0.2s ease-in-out;
-
-  &:hover {
-    background: white;
-    color: red;
-  }
-`;
-
-const PreviewImage = styled.img`
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-  border-radius: 10px;
-  border: 2px solid #007bff;
-`;
-
-const CsvFileIcon = styled(FileText)`
-  width: 60px;
-  height: 60px;
-  color: #007bff;
-`;
-
-const ZipFileIcon = styled(Archive)`
-  width: 60px;
-  height: 60px;
-  color: #ff9800;
-`;
-const ButtonContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 10px;
-  `;
-const UploadButton = styled.button`
-  background-color: #007bff;
-  color: white;
-  padding: 12px 30px;
-  font-size: 18px;
-  border: none;
-  border-radius: 10px;
-  margin-top: 15px;
-  cursor: pointer;
-  transition: 0.3s ease-in-out;
-
-  &:hover {
-    background-color: #0056b3;
-  }
-`;
-
-const Upload = () => {
-  const [files, setFiles] = useState([]);
-  const [error, setError] = useState("");
+const Upload = ({mode}) => {
+  const [btn, setBtn] = useState(0);
+  const [formSchema, setFormSchema] = useState([]);
+  const [formData, setFormData] = useState({});
+  const [errors, setErrors] = useState({});
+  const [tableSchema, setTableSchema] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nlQuery, setNlQuery] = useState("");
+  const [generatedSQL, setGeneratedSQL] = useState("");
+  const [queryResult, setQueryResult] = useState(null);
+  const [message, setMessage] = useState("");
 
-  const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
-    if (rejectedFiles.length > 0) {
-      setError("Only .pdf files are allowed!");
-      return;
+  const handleChange = (e, field) => {
+    const { name, value,checked } = e.target;
+    let newValue = value;
+
+    // Checkbox
+    if (field.inputType === "checkbox") {
+      if (field.options && field.options.length > 0) {
+        const prevValues = Array.isArray(formData[name]) ? formData[name] : [];
+        newValue = checked
+          ? [...prevValues, value]
+          : prevValues.filter((v) => v !== value);
+      } else {
+        newValue = checked ? 1 : 0;
+      }
+    } else if (field.inputType === "radio") {
+      newValue = value;
+    } else if (field.inputType === "number") {
+      newValue = value ? Number(value) : "";
     }
 
-    setError(""); // Clear any previous errors
+    setFormData((prev) => ({ ...prev, [name]: newValue }));
 
-    const newFiles = acceptedFiles.map(file =>
-      Object.assign(file, { preview: file.type.startsWith("image") ? URL.createObjectURL(file) : null })
-    );
-    setFiles(prevFiles => [...prevFiles, ...newFiles]);
-  }, []);
+    // --- Validation ---
+    let errorMsg = "";
 
-  const removeFile = (index) => {
-    const newFiles = [...files];
-    newFiles.splice(index, 1);
-    setFiles(newFiles);
+    if (field.required) {
+      if (field.inputType === "checkbox") {
+        if (field.options?.length > 0 && (!newValue || newValue.length === 0)) {
+          errorMsg = "Please select at least one option";
+        } else if (!field.options && newValue !== 1) {
+          errorMsg = "This field is required";
+        }
+      } else if (newValue === "" || newValue === null || newValue === undefined) {
+        errorMsg = "This field is required";
+      }
+    }
+
+    if (!errorMsg && field.validation?.maxLength && String(newValue).length > field.validation.maxLength) {
+      errorMsg = `Max length is ${field.validation.maxLength}`;
+    }
+
+    if (!errorMsg && field.inputType === "number") {
+      const { min, max } = field.validation || {};
+      if (min !== undefined && newValue < min) errorMsg = `Value must be ≥ ${min}`;
+      if (max !== undefined && newValue > max) errorMsg = `Value must be ≤ ${max}`;
+    }
+
+    if (!errorMsg && field.validation?.pattern) {
+      const regex = new RegExp(`^${field.validation.pattern}$`);
+      if (newValue && !regex.test(String(newValue))) errorMsg = "Invalid value";
+    }
+
+    if (!errorMsg && field.inputType === "email") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (newValue && !emailRegex.test(newValue)) errorMsg = "Invalid email address";
+    }
+
+    setErrors((prev) => ({ ...prev, [name]: errorMsg }));
   };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "application/pdf": []
-    }
-    
-  });
-
-  // const uploadFiles = async () => {
-  //   if (files.length === 0) {
-  //     alert("No files selected!");
-  //     return;
-  //   }
-  
-  //   const formData = new FormData();
-  //   files.forEach(file => formData.append("files", file));
-  
-  //   try {
-  //     const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/upload`, {
-  //       method: "POST",
-  //       body: formData,
-  //     });
-  
-  //     if (response.ok) {
-  //       alert("Files uploaded successfully");
-  //        // Clear uploaded files after success
-  //     } else {
-  //       console.error("Upload failed");
-  //     }
-  //   } catch (error) {
-  //     console.error("Upload error:", error);
-  //   }
-  // };
-  
-  const mergeFiles = async () => {
-    if (files.length === 0) {
-      alert("No files selected!");
+  // --- Generate form from SQL schema ---
+  const handleGenerate = async () => {
+    if (!tableSchema.trim()) {
+      toast.error("Please enter table schema first!");
       return;
     }
-  
-    const formData = new FormData();
-    files.forEach(file => formData.append("files", file));
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/upload/merge`, {
+      const res = await fetch("http://localhost:5000/generate-form", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableSchema }),
       });
-  
-      const data = await response.json();
-  
-      if (response.ok) {
-        alert("PDFs merged successfully!");
-        setFiles([]);
-        window.open(data.mergedFile, "_blank");
-      } else {
-        console.error("Merge failed:", data.error);
+      const json = await res.json();
+      if (!json || json.length === 0) {
+        toast.error("No form fields generated. Check your SQL schema.");
+        return;
       }
-    } catch (error) {
-      console.error("Merge error:", error);
+
+      setFormSchema(json);
+
+      // Initialize form data with defaults
+      const initData = {};
+      json.forEach((field) => {
+        if (field.default !== undefined && field.default !== null) {
+          initData[field.name] = field.default;
+        } else if (field.inputType === "checkbox") {
+          initData[field.name] = field.options ? [] : 0;
+        } else {
+          initData[field.name] = "";
+        }
+      });
+      setFormData(initData);
+      setErrors({});
+      setBtn(1);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate form.");
     } finally {
       setLoading(false);
     }
   };
-  
-  const compressFile = async () => {
-    if (files.length === 0) {
-      alert("No files selected!");
+
+  // --- Submit form ---
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const newErrors = {};
+    formSchema.forEach((field) => {
+      const val = formData[field.name];
+      if (field.required && (!val || (Array.isArray(val) && val.length === 0))) {
+        newErrors[field.name] = "This field is required";
+      }
+    });
+
+    setErrors(newErrors);
+    const hasErrors = Object.values(newErrors).some((msg) => msg);
+    if (hasErrors) {
+      toast.error("Please fix the highlighted errors before submitting.");
       return;
     }
-  
-    const formData = new FormData();
-    files.forEach(file => formData.append("files", file));
+
+    const tableName = tableSchema.match(/CREATE TABLE (\w+)/i)?.[1];
+    if (!tableName) {
+      toast.error("Could not detect table name. Please use CREATE TABLE syntax.");
+      return;
+    }
+
     try {
-      setLoading(true);
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/upload/compress`, {
+      const res = await fetch("http://localhost:5000/insert-data", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableName, formData, tableSchema }),
       });
-  
-      const data = await response.json();
-  
-      if (response.ok) {
-        alert("PDF compressed successfully!");
-        setFiles([]);
-        window.open(data.compressedFile, "_blank");
+
+      const result = await res.json();
+      if (result.message === "inserted") {
+        toast.success("Data inserted successfully!");
+        const resetData = {};
+  formSchema.forEach((field) => {
+    if (field.default !== undefined && field.default !== null) {
+      resetData[field.name] = field.default;
+    } else if (field.inputType === "checkbox") {
+      resetData[field.name] = field.options ? [] : 0;
+    } else {
+      resetData[field.name] = "";
+    }
+  });
+  setFormData(resetData);
+  setErrors({});
       } else {
-        console.error("Compression failed:", data.error);
+        toast.error("Insert failed: " + (result.error || "Unknown error"));
       }
-    } catch (error) {
-      console.error("Compression error:", error);
-    }finally {
-      setLoading(false);
+    } catch (err) {
+      console.error("Insert error:", err);
+      toast.error("Error inserting data. Check console for details.");
     }
   };
-  
-  const redactFile = async () => {
-    if (files.length === 0) {
-      alert("No files selected!");
+
+  const handleNaturalQuery = async () => {
+
+    if (!nlQuery.trim()) {
+      toast.error("Please enter a natural language query.");
       return;
     }
-  
-    const formData = new FormData();
-    files.forEach(file => formData.append("files", file));
+
+    setErrors({});
+    setLoading(true);
+    setGeneratedSQL("");
+    setQueryResult(null);
+    setMessage("");
+
     try {
-      setLoading(true);
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/upload/redact`, {
+      const res = await fetch("http://localhost:5000/nl-query", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nlQuery }),
       });
-  
-      const data = await response.json();
-  
-      if (response.ok) {
-        alert("PDF redacted successfully!");
-        setFiles([]);
-        window.open(data.redactFile, "_blank");
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setGeneratedSQL(data.sqlQuery || data.sql || "");
+        setQueryResult(data.result || null);
+        setMessage(data.message || "");
       } else {
-        console.error("Redact failed:", data.error);
+        setErrors({ api: data.error || "Something went wrong." });
+        toast.error("Something went wrong.")
       }
-    } catch (error) {
-      console.error("Redact error:", error);
-    }finally {
-      setLoading(false);
-    }
-  };
-  
-  const flattenFile = async () => {
-    if (files.length === 0) {
-      alert("No files selected!");
-      return;
-    }
-  
-    const formData = new FormData();
-    files.forEach(file => formData.append("files", file));
-    try {
-      setLoading(true);
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/upload/flatten`, {
-        method: "POST",
-        body: formData,
-      });
-  
-      const data = await response.json();
-  
-      if (response.ok) {
-        alert("PDF flattened successfully!");
-        setFiles([]);
-        window.open(data.flattenFile, "_blank");
-      } else {
-        console.error("flatten failed:", data.error);
-      }
-    } catch (error) {
-      console.error("flatten error:", error);
-    }finally {
+    } catch (err) {
+      console.error("Error:", err);
+      setErrors({ api: "Failed to connect to backend." });
+      toast.error("Failed to connect to backend.");
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container>
-      {loading && <Loader />}
-      <Heading>Upload Files</Heading>
-      <ContentWrapper>
-        <FileUploadContainer>
-          <FileUploadBox {...getRootProps()} className={isDragActive ? "dragover" : ""}>
-            <input {...getInputProps()} />
-            <p>Drag & Drop your files here or click to upload</p>
-            <span className="text-danger">(*Only .pdf accepted)</span>
-          </FileUploadBox>
+    <StyledWrapper>
+      {btn === 0 && (
+        <>
+          <div className="form-control">
+            <textarea
+              className="input input-alt"
+              placeholder={mode===0?"Type SQL CREATE TABLE statement here":"Type the query you want to execute"}
+              rows={15}
+              value={mode===0?tableSchema:nlQuery}
+              onChange={(e) => {mode===0?setTableSchema(e.target.value):setNlQuery(e.target.value)}}
+            />
+            <span className="input-border input-border-alt" />
+          </div>
+          <div className="button">
+            <SearchButton btn={btn} setbtn={mode===0?handleGenerate:handleNaturalQuery} mode={mode} />
+          </div>
+        </>
+      )}
 
-          {error && <p style={{ color: "red", marginTop: "10px" }}>{error}</p>}
-          <ButtonContainer>
-            {/* <UploadButton onClick={uploadFiles}>Upload</UploadButton> */}
-            <UploadButton onClick={mergeFiles}>Merge PDFs</UploadButton>
-            <UploadButton onClick={compressFile}>Compress PDF</UploadButton>
-            <UploadButton onClick={redactFile}>Redact PDF</UploadButton>
-            <UploadButton onClick={flattenFile}>Flatten PDF</UploadButton>
-          </ButtonContainer>
-        </FileUploadContainer>
+      {mode===0&&!loading&&btn === 1 && formSchema.length > 0 && (
+        <div className="custom-form-wrapper">
+  <div className="custom-form-back" onClick={() => setBtn(0)}>
+    <FaArrowLeft /> Back
+  </div>
 
-        {files.length > 0 && (
-          <PreviewWrapper>
-            {files.map((file, index) => (
-              <PreviewFileContainer key={index}>
-                <RemoveButton onClick={() => removeFile(index)}>
-                  <X size={14} />
-                </RemoveButton>
-                {file.preview ? (
-                  <PreviewImage src={file.preview} alt="preview" />
-                ) : file.name.endsWith(".pdf") ? (
-                  <>
-                    <CsvFileIcon />
-                    <p style={{ color: "white", fontSize: "14px", marginTop: "5px" }}>
-                      {file.name}
-                    </p>
-                  </>
-                ) : file.name.endsWith(".zip") || file.name.endsWith(".rar") ? (
-                  <>
-                    <ZipFileIcon />
-                    <p style={{ color: "white", fontSize: "14px", marginTop: "5px" }}>
-                      {file.name}
-                    </p>
-                  </>
-                ) : null}
-              </PreviewFileContainer>
+  <form onSubmit={handleSubmit}>
+    {formSchema.map((field) => (
+      <div key={field.name} className="custom-form-control">
+        <label>{field.label}</label>
+
+        {field.inputType === "select" ? (
+          <select
+            name={field.name}
+            value={formData[field.name] || ""}
+            onChange={(e) => handleChange(e, field)}
+            className={errors[field.name] ? "custom-error-input" : ""}
+          >
+            <option value="">Select an option</option>
+            {field.options?.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
-          </PreviewWrapper>
+          </select>
+        ) : field.inputType === "radio" ? (
+          field.options?.map((opt) => (
+            <label key={opt.value} className="custom-radio-label">
+              <input
+                type="radio"
+                name={field.name}
+                value={opt.value}
+                checked={String(formData[field.name]) === String(opt.value)}
+                onChange={(e) => handleChange(e, field)}
+              />
+              {opt.label}
+            </label>
+          ))
+        ) : field.inputType === "checkbox" && field.options ? (
+          field.options.map((opt) => (
+            <label key={opt.value} className="custom-checkbox-label">
+              <input
+                type="checkbox"
+                name={field.name}
+                value={opt.value}
+                checked={formData[field.name]?.includes(opt.value)}
+                onChange={(e) => handleChange(e, field)}
+              />
+              {opt.label}
+            </label>
+          ))
+        ) : field.inputType === "checkbox" ? (
+          <input
+            type="checkbox"
+            name={field.name}
+            checked={!!formData[field.name]}
+            onChange={(e) => handleChange(e, field)}
+            className={errors[field.name] ? "custom-error-input" : ""}
+          />
+        ) : field.inputType === "textarea" ? (
+          <textarea
+            name={field.name}
+            value={formData[field.name] || ""}
+            onChange={(e) => handleChange(e, field)}
+            required={field.required}
+            maxLength={field.validation?.maxLength}
+            className={errors[field.name] ? "custom-error-input" : ""}
+            rows={4}
+            placeholder={
+              field.default !== undefined
+                ? `Default: ${field.default}`
+                : `Enter ${field.label.toLowerCase()}...`
+            }
+          />
+        ) : (
+          <input
+            type={field.inputType}
+            name={field.name}
+            value={formData[field.name] || ""}
+            onChange={(e) => handleChange(e, field)}
+            required={field.required}
+            maxLength={field.validation?.maxLength}
+            placeholder={
+              field.default !== undefined
+                ? `Default: ${field.default}`
+                : `Enter ${field.label.toLowerCase()}...`
+            }
+            className={errors[field.name] ? "custom-error-input" : ""}
+          />
         )}
-      </ContentWrapper>
-      <Footer/>
-    </Container>
-    
+
+        {errors[field.name] && (
+          <span className="custom-error">{errors[field.name]}</span>
+        )}
+      </div>
+    ))}
+
+    <button type="submit" className="custom-submit-btn">
+      Submit
+    </button>
+  </form>
+</div>
+      )}
+
+    {mode === 1 && generatedSQL && (
+  <div className="query-output-section">
+    <h2>Generated SQL</h2>
+    <pre className="query-sql-box">{generatedSQL}</pre>
+  </div>
+)}
+
+{mode === 1 && queryResult && Array.isArray(queryResult) && queryResult.length > 0 && (
+  <div className="query-output-section">
+    <h2>Query Result</h2>
+    <table className="query-result-table">
+      <thead>
+        <tr>
+          {Object.keys(queryResult[0]).map((key) => (
+            <th key={key}>{key}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {queryResult.map((row, i) => (
+          <tr key={i}>
+            {Object.values(row).map((val, j) => (
+              <td key={j}>{String(val)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
+
+{mode === 1 && message && (
+  <div className="query-output-section query-info-message">
+    {message}
+  </div>
+)}
+
+       
+    {loading&&<Loader mode={mode} />}
+    </StyledWrapper>
   );
 };
+
+const StyledWrapper = styled.div`
+  .input {
+    color: #fff;
+    font-size: 0.9rem;
+    background-color: #212121;
+    width: 100%;
+    box-sizing: border-box;
+    padding-inline: 0.5em;
+    padding-block: 0.7em;
+    border: none;
+    border-bottom: var(--border-height) solid var(--border-before-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #b4b4b4 transparent;
+  }
+  
+  .button{
+    margin-left:350px;
+  }
+
+  .input-border {
+    position: absolute;
+    background: var(--border-after-color);
+    width: 0%;
+    height: 2px;
+    bottom: 0;
+    left: 0;
+    transition: width 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+  }
+
+  .input:focus {
+    outline: none;
+  }
+
+  .input:focus + .input-border {
+    width: 100%;
+  }
+
+  .form-control {
+    position: relative;
+    width: 80vw;
+    background-color: #212121;
+    margin: auto;
+    margin-bottom:15px;
+  }
+
+  .input-alt {
+    font-size: 1.2rem;
+    padding-inline: 1em;
+    padding-block: 0.8em;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .input-border-alt {
+    height: 3px;
+    background: linear-gradient(90deg, #FF6464 0%, #FFBF59 50%, #47C9FF 100%);
+    transition: width 0.4s cubic-bezier(0.42, 0, 0.58, 1.00);
+  }
+
+  .input-alt:focus + .input-border-alt {
+    width: 100%;
+  }`;
 
 export default Upload;
