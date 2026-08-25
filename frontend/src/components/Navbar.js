@@ -21,7 +21,7 @@ const Navbar = () => {
   <ul>
     <li><Link to='/' className='text-white' onClick={home} style={{marginInlineStart: -500}}>
     <img src={logo} alt="" height="35" width="35" style={{marginRight: 5}} />
-    <span style={{textTransform: 'none'}}>SayQL</span></Link></li>
+    <span style={{textTransform: 'none'}}>AI DB Copilot</span></Link></li>
     <li>
       <Link to="/"className={`${mode===1?"text-white":""}`} onClick={home}>Home</Link>
     </li>

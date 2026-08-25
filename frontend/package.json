@@ -1,5 +1,5 @@
 {
-  "name": "yantra",
+  "name": "unified-ai-database-copilot",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -19,7 +19,8 @@
     "react-hot-toast": "^2.6.0",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.1.5",
-    "react-scripts": "^0.0.0",
+    "react-scripts": "5.0.1",
+    "recharts": "^3.10.1",
     "styled-components": "^6.1.15",
     "tailwindcss": "^4.1.14",
     "web-vitals": "^2.1.4"
