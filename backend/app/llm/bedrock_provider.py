@@ -9,6 +9,27 @@ from .base import LLMProvider
 from ..config import settings
 
 
+def _inline_refs(schema: dict) -> dict:
+    """
+    Recursively replace every '$ref' pointer with the actual definition it points to.
+    This produces a flat, self-contained schema that LLMs handle reliably without
+    needing to understand JSON Schema $ref mechanics.
+    """
+    defs = schema.get("$defs", {})
+
+    def resolve(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            if "$ref" in obj:
+                ref_key = obj["$ref"].split("/")[-1]
+                return resolve(defs.get(ref_key, {}))
+            return {k: resolve(v) for k, v in obj.items() if k != "$defs"}
+        if isinstance(obj, list):
+            return [resolve(item) for item in obj]
+        return obj
+
+    return resolve(schema)
+
+
 class BedrockProvider(LLMProvider):
     """
     LLM provider backed by AWS Bedrock Runtime (converse API).
@@ -72,7 +93,7 @@ class BedrockProvider(LLMProvider):
         response_schema: Type[BaseModel],
         system_instruction: str | None = None,
     ) -> Any:
-        schema_json = json.dumps(response_schema.model_json_schema(), indent=2)
+        schema_json = json.dumps(_inline_refs(response_schema.model_json_schema()), indent=2)
         augmented_prompt = (
             f"{prompt}\n\n"
             f"You MUST respond with ONLY valid JSON that exactly matches this JSON Schema "

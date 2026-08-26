@@ -33,3 +33,6 @@ yarn-error.log*
 .DS_Store
 .coverage
 coverage/
+
+# Database
+/unified_ai_database_seed_data/

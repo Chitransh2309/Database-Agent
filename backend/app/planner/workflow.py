@@ -180,7 +180,15 @@ class PlannerService:
 
     async def _mongo_query(self, state: PipelineState) -> dict:
         """Generate and execute a MongoDB find/aggregate query with repair loop."""
-        schema_context = state.get("schema_context", "")
+        # Use MongoDB-only context so the generator never sees PostgreSQL table names.
+        from ..semantic_twin.twin_service import get_twin_service
+        twin_svc = get_twin_service()
+        mongo_objects = [o for o in twin_svc.twin.objects if o.source == "mongodb"]
+        if mongo_objects:
+            schema_context = "\n".join(o.to_context_string() for o in mongo_objects)
+        else:
+            schema_context = state.get("schema_context", "")
+
         if not schema_context.strip():
             return {
                 "error": "No schema context — no collections found in the database.",
