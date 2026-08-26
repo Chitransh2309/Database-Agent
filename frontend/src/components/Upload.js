@@ -23,17 +23,20 @@ const Upload = ({mode}) => {
 
   // Phase 12: Dynamic Forms state
   const [inputMode, setInputMode] = useState("table"); // "table" | "ddl"
-  const [tableList, setTableList] = useState([]);
+  const [tableList, setTableList] = useState([]); // [{name, source}]
   const [selectedTable, setSelectedTable] = useState("");
+  const [selectedSource, setSelectedSource] = useState("postgresql");
   const [tableListLoading, setTableListLoading] = useState(false);
 
-  // Fetch available tables from the Semantic Twin
+  // Fetch available tables and collections from the Semantic Twin
   const fetchTables = async () => {
     setTableListLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/schema`);
       const data = await res.json();
-      setTableList(data.postgresql_tables || []);
+      const pgTables = (data.postgresql_tables || []).map(n => ({ name: n, source: "postgresql" }));
+      const mongoColls = (data.mongodb_collections || []).map(n => ({ name: n, source: "mongodb" }));
+      setTableList([...pgTables, ...mongoColls]);
     } catch {
       setTableList([]);
     } finally {
@@ -131,7 +134,7 @@ const Upload = ({mode}) => {
         const res = await fetch(`${BACKEND_URL}/api/generate-form-by-table`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tableName: selectedTable }),
+          body: JSON.stringify({ tableName: selectedTable, source: selectedSource }),
         });
         if (!res.ok) {
           const err = await res.json();
@@ -188,9 +191,11 @@ const Upload = ({mode}) => {
 
     let tableName;
     let schemaForInsert = "";
+    let insertSource = "postgresql";
 
     if (inputMode === "table") {
       tableName = selectedTable;
+      insertSource = selectedSource;
     } else {
       tableName = tableSchema.match(/CREATE TABLE (\w+)/i)?.[1];
       schemaForInsert = tableSchema;
@@ -204,7 +209,7 @@ const Upload = ({mode}) => {
       const res = await fetch(`${BACKEND_URL}/api/insert-data`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableName, formData, tableSchema: schemaForInsert }),
+        body: JSON.stringify({ tableName, formData, tableSchema: schemaForInsert, source: insertSource }),
       });
 
       const result = await res.json();
@@ -288,14 +293,21 @@ const Upload = ({mode}) => {
                 <select
                   className="table-select"
                   value={selectedTable}
-                  onChange={(e) => setSelectedTable(e.target.value)}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    const entry = tableList.find(t => t.name === name);
+                    setSelectedTable(name);
+                    setSelectedSource(entry ? entry.source : "postgresql");
+                  }}
                   disabled={tableListLoading}
                 >
                   <option value="">
-                    {tableListLoading ? "Loading tables…" : "— choose a table —"}
+                    {tableListLoading ? "Loading…" : "— choose a table or collection —"}
                   </option>
                   {tableList.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                    <option key={`${t.source}-${t.name}`} value={t.name}>
+                      {t.name} {t.source === "mongodb" ? "(MongoDB)" : "(PG)"}
+                    </option>
                   ))}
                 </select>
                 <button
@@ -309,7 +321,7 @@ const Upload = ({mode}) => {
               </div>
               {tableList.length === 0 && !tableListLoading && (
                 <p className="twin-hint">
-                  No tables found. Run <code>POST /api/schema/refresh</code> to build the Semantic Twin.
+                  No tables or collections found. Run <code>POST /api/schema/refresh</code> to build the Semantic Twin.
                 </p>
               )}
             </div>

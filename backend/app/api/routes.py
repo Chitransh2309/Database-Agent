@@ -73,6 +73,7 @@ class GenerateFormRequest(BaseModel):
 
 class GenerateFormByTableRequest(BaseModel):
     tableName: str
+    source: str = "postgresql"  # "postgresql" | "mongodb"
 
 
 class IntentRequest(BaseModel):
@@ -87,6 +88,7 @@ class InsertDataRequest(BaseModel):
     tableName: str
     formData: dict[str, Any]
     tableSchema: str = ""  # optional when table already exists
+    source: str = "postgresql"  # "postgresql" | "mongodb"
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
@@ -195,39 +197,60 @@ async def generate_form_by_table(
     llm: LLMProvider = Depends(get_llm),
 ):
     """
-    Look up an existing PostgreSQL table in the Semantic Twin and return
-    form field descriptors — no raw DDL input required from the client.
+    Look up an existing PostgreSQL table or MongoDB collection in the Semantic Twin
+    and return form field descriptors — no raw DDL input required from the client.
     """
     if not req.tableName.strip():
         raise HTTPException(status_code=400, detail="tableName is required.")
 
+    source = req.source if req.source in ("postgresql", "mongodb") else "postgresql"
+
     from ..semantic_twin.twin_service import get_twin_service
     svc = get_twin_service()
     obj = next(
-        (o for o in svc.twin.objects if o.name == req.tableName and o.source == "postgresql"),
+        (o for o in svc.twin.objects if o.name == req.tableName and o.source == source),
         None,
     )
+    kind = "Table" if source == "postgresql" else "Collection"
     if obj is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Table '{req.tableName}' not found in schema twin. Call POST /api/schema/refresh first.",
+            detail=f"{kind} '{req.tableName}' not found in schema twin. Call POST /api/schema/refresh first.",
         )
 
-    ddl = _build_ddl_from_meta(obj)
+    if source == "mongodb":
+        fields_desc = (
+            ", ".join(f"{c.name} ({c.sql_type})" for c in obj.columns)
+            or "unknown fields (collection is empty — no documents sampled)"
+        )
+        prompt = (
+            f"MongoDB collection '{req.tableName}' has these document fields: {fields_desc}\n\n"
+            "Generate a JSON object with a 'fields' array for a document insert form.\n"
+            "Rules:\n"
+            "- Skip '_id' fields.\n"
+            "- Map types: string/str/varchar/text -> text, int/integer/number/float/decimal/double -> number, "
+            "bool/boolean -> checkbox, date/datetime/timestamp -> date, object/array/list -> textarea.\n"
+            "- For fields named 'email' use inputType 'email'.\n"
+            "- required=false for all MongoDB fields (MongoDB is schemaless).\n"
+            "- Each field: name, label (human-readable title-case), inputType, required, options (empty list), default (null), validation (null).\n"
+            "Return ONLY valid JSON matching the schema."
+        )
+    else:
+        ddl = _build_ddl_from_meta(obj)
+        prompt = (
+            "Given this SQL CREATE TABLE statement:\n\n"
+            f"{ddl}\n\n"
+            "Generate a JSON object with a 'fields' array. Each element describes one form field.\n"
+            "Rules:\n"
+            "- Skip auto-increment primary key columns.\n"
+            "- Map SQL types: INT/BIGINT/FLOAT/DECIMAL -> number, BOOLEAN -> checkbox, DATE/DATETIME -> date, TEXT/LONGTEXT -> textarea, VARCHAR -> text.\n"
+            "- For columns named 'email' use inputType 'email'.\n"
+            "- For ENUM columns use inputType 'select' and populate options as [{value, label}].\n"
+            "- required=true for NOT NULL columns that have no DEFAULT.\n"
+            "- Each field: name (column name), label (human-readable title-case), inputType, required, options (empty list if not select/radio), default (null if none), validation (null if none).\n"
+            "Return ONLY valid JSON matching the schema."
+        )
 
-    prompt = (
-        "Given this SQL CREATE TABLE statement:\n\n"
-        f"{ddl}\n\n"
-        "Generate a JSON object with a 'fields' array. Each element describes one form field.\n"
-        "Rules:\n"
-        "- Skip auto-increment primary key columns.\n"
-        "- Map SQL types: INT/BIGINT/FLOAT/DECIMAL -> number, BOOLEAN -> checkbox, DATE/DATETIME -> date, TEXT/LONGTEXT -> textarea, VARCHAR -> text.\n"
-        "- For columns named 'email' use inputType 'email'.\n"
-        "- For ENUM columns use inputType 'select' and populate options as [{value, label}].\n"
-        "- required=true for NOT NULL columns that have no DEFAULT.\n"
-        "- Each field: name (column name), label (human-readable title-case), inputType, required, options (empty list if not select/radio), default (null if none), validation (null if none).\n"
-        "Return ONLY valid JSON matching the schema."
-    )
     result: FormSchemaLLMResponse = await llm.generate_structured(
         prompt=prompt,
         response_schema=FormSchemaLLMResponse,
@@ -278,11 +301,21 @@ async def nl_query(
 async def insert_data(
     req: InsertDataRequest,
     db: PostgresService = Depends(get_db),
+    mongo: MongoService = Depends(get_mongo),
 ):
     """
-    Create the table if it does not exist, then insert one row.
-    Returns {"message": "inserted"} on success (matches frontend check).
+    Insert one row (PostgreSQL) or one document (MongoDB).
+    For PostgreSQL: creates the table first if it does not exist.
+    Returns {"message": "inserted"} on success.
     """
+    if req.source == "mongodb":
+        try:
+            mongo.insert_one(req.tableName, req.formData)
+            return {"message": "inserted"}
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Insert failed: {exc}")
+
+    # PostgreSQL path
     if not db.table_exists(req.tableName):
         try:
             db.execute_ddl(req.tableSchema)

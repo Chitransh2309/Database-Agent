@@ -58,7 +58,12 @@ class PlannerService:
     async def _classify_intent(self, state: PipelineState) -> dict:
         from ..semantic_twin.twin_service import get_twin_service
         twin = get_twin_service()
-        available = [o.name for o in twin.twin.objects]
+        # Label each object with its source so the LLM can correctly route
+        # MongoDB-targeted queries to target_db=mongodb rather than defaulting to postgresql.
+        available = [
+            f"{o.name} ({'PostgreSQL table' if o.source == 'postgresql' else 'MongoDB collection'})"
+            for o in twin.twin.objects
+        ]
         intent = await self._classifier.classify(
             state["nl_query"],
             available_objects=available or None,
