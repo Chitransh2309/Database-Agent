@@ -60,5 +60,8 @@ def _python_to_type(value) -> str:
 
 
 def _build_embedding_text(name: str, columns: list[ColumnMeta]) -> str:
-    field_names = " ".join(c.name for c in columns)
-    return f"mongodb collection {name}: {field_names}"
+    # Include field types so semantic search can distinguish, e.g., a collection
+    # with "rating INTEGER" from a PG table with the same name.
+    col_parts = [f"{c.name} {c.sql_type.lower()}" for c in columns]
+    cols = " | ".join(col_parts)
+    return f"mongodb collection {name} fields: {cols}"

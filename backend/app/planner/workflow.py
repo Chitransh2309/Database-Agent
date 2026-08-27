@@ -57,16 +57,38 @@ class PlannerService:
 
     async def _classify_intent(self, state: PipelineState) -> dict:
         from ..semantic_twin.twin_service import get_twin_service
-        twin = get_twin_service()
-        # Label each object with its source so the LLM can correctly route
-        # MongoDB-targeted queries to target_db=mongodb rather than defaulting to postgresql.
-        available = [
-            f"{o.name} ({'PostgreSQL table' if o.source == 'postgresql' else 'MongoDB collection'})"
-            for o in twin.twin.objects
-        ]
+        twin_svc = get_twin_service()
+        objects = twin_svc.twin.objects
+
+        # Build a compact per-source schema view so the classifier can see
+        # which columns each entity has and which DB it lives in.
+        pg_objs = [o for o in objects if o.source == "postgresql"]
+        mg_objs = [o for o in objects if o.source == "mongodb"]
+
+        parts: list[str] = []
+        if pg_objs:
+            lines = [
+                f"  {o.name}({', '.join(c.name for c in o.columns[:10])})"
+                for o in pg_objs
+            ]
+            parts.append("PostgreSQL tables:\n" + "\n".join(lines))
+        if mg_objs:
+            lines = [
+                f"  {o.name}({', '.join(c.name for c in o.columns[:10])})"
+                for o in mg_objs
+            ]
+            parts.append("MongoDB collections:\n" + "\n".join(lines))
+
+        # Surface potential join keys so the LLM knows when hybrid IS valid
+        links = twin_svc.twin.cross_db_links()
+        if links:
+            parts.append("Potential cross-DB join keys:\n" + "\n".join(links))
+
+        schema_hint = "\n\n".join(parts) if parts else None
+
         intent = await self._classifier.classify(
             state["nl_query"],
-            available_objects=available or None,
+            schema_hint=schema_hint,
         )
         return {"intent": intent}
 

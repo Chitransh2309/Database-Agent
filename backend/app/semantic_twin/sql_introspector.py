@@ -49,14 +49,20 @@ def introspect_postgres(engine) -> list[ObjectMeta]:
 
 
 def _build_embedding_text(source: str, name: str, columns: list[ColumnMeta]) -> str:
-    parts = [f"{source} table {name}:"]
+    # Include column names AND types so semantic search matches on both field semantics
+    # and data-type keywords (e.g. "rating INTEGER" scores higher for "highest rated" queries).
+    col_parts = []
     for c in columns:
-        detail = c.name
+        part = c.name
+        if c.sql_type:
+            part += f" {c.sql_type.lower()}"
         if c.is_pk:
-            detail += " primary key"
+            part += " primary_key"
         if c.fk_to:
-            detail += f" references {c.fk_to}"
+            ref_table = c.fk_to.split(".")[0]
+            part += f" references_{ref_table}"
         if not c.nullable:
-            detail += " required"
-        parts.append(detail)
-    return " ".join(parts)
+            part += " required"
+        col_parts.append(part)
+    cols = " | ".join(col_parts)
+    return f"{source} table {name} columns: {cols}"

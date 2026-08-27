@@ -17,13 +17,27 @@ Intent selection rules:
   schema_management — alter / drop / rename / modify existing tables or collections
   visualization     — chart / graph / plot / visualize / dashboard
   explanation       — "what tables exist", "describe X", "explain the schema"
-  hybrid_query      — request that explicitly spans both PostgreSQL and MongoDB data
+  hybrid_query      — ONLY when the query explicitly requires combining results from BOTH
+                      PostgreSQL AND MongoDB in a single response (e.g. "join orders from
+                      SQL with reviews from MongoDB")
 
 target_db selection rules:
-  postgresql  — SQL tables, relational/structured data
-  mongodb     — collections, documents, JSON / NoSQL
-  both        — hybrid request spanning both systems
+  postgresql  — ALL referenced entities live in PostgreSQL; use this by default for relational data
+  mongodb     — ALL referenced entities live in MongoDB; use this for collections/documents
+  both        — ONLY when the response MUST contain joined/correlated data from BOTH sources
   none        — schema-agnostic (e.g. database_creation, pure explanation)
+
+ROUTING PRIORITY (apply in order — stop at the first rule that matches):
+  1. Identify every table/collection the query references from the schema hint below.
+  2. If all referenced entities are PostgreSQL tables → target_db=postgresql, intent=query/crud/etc.
+  3. If all referenced entities are MongoDB collections → target_db=mongodb, intent=query/crud/etc.
+  4. If entities from BOTH sources are needed AND the user explicitly asks to JOIN or COMBINE them
+     → target_db=both, intent=hybrid_query.
+  5. If unsure which DB an entity belongs to, prefer the DB where the primary entity lives.
+
+NEVER use target_db=both or intent=hybrid_query just because both databases exist in the system.
+A query about reviews, ratings, logs, or events typically targets MongoDB only.
+A query about users, products, orders, employees, or transactions typically targets PostgreSQL only.
 
 requires_schema:
   true  — needs column names / types / relationships to execute
@@ -39,22 +53,26 @@ class IntentClassifier:
         self,
         nl_query: str,
         available_objects: list[str] | None = None,
+        schema_hint: str | None = None,
     ) -> IntentResult:
         """
         Classify *nl_query* into a structured IntentResult.
 
-        available_objects — names of all known tables/collections from the Semantic Twin.
-        They are passed as a hint so the LLM can identify referenced entities accurately.
+        schema_hint — pre-formatted multi-line schema context (preferred when available).
+        available_objects — fallback flat list of object names when schema_hint is absent.
         """
-        schema_hint = ""
-        if available_objects:
-            schema_hint = (
+        if schema_hint:
+            hint_text = f"\n\nDatabase schema (use this to identify which DB each entity belongs to):\n{schema_hint}"
+        elif available_objects:
+            hint_text = (
                 f"\n\nKnown tables/collections in the system: "
                 f"{', '.join(available_objects)}"
             )
+        else:
+            hint_text = ""
 
         prompt = (
-            f'User request: "{nl_query}"{schema_hint}\n\n'
+            f'User request: "{nl_query}"{hint_text}\n\n'
             f"{_INTENT_GUIDE}\n\n"
             "Return a JSON object with these fields:\n"
             "  intent        — one of the intent values above\n"
