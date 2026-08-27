@@ -287,64 +287,14 @@ class PlannerService:
                 "message": "No tables or collections found.",
             }
 
-        nl_query = state["nl_query"]
-
-        plan, plan_error = await self._hybrid_exec.plan(nl_query, schema_context)
-        if plan_error or plan is None:
-            return {
-                "error": f"Hybrid query planning failed: {plan_error}",
-                "message": "Could not generate a hybrid query plan.",
-            }
-
-        # Execute PostgreSQL part
-        pg_rows: list[dict] = []
-        try:
-            sql_result = self._db.execute_query(plan.sql_query)
-            pg_rows = sql_result["rows"]
-        except Exception as exc:
-            repaired_sql, _ = await self._sql_gen.repair(
-                plan.sql_query, str(exc), schema_context, nl_query
-            )
-            try:
-                sql_result = self._db.execute_query(repaired_sql)
-                pg_rows = sql_result["rows"]
-                plan = plan.model_copy(update={"sql_query": repaired_sql})
-            except Exception as exc2:
-                return {
-                    "error": f"PostgreSQL part failed: {exc2}",
-                    "message": "Hybrid query: PostgreSQL execution failed.",
-                    "hybrid_plan": plan.model_dump(),
-                }
-
-        # Execute MongoDB part
-        mongo_rows: list[dict] = []
-        try:
-            spec = plan.mongo_spec
-            if spec.query_type == "aggregate":
-                mongo_rows = self._mongo.aggregate(spec.collection, spec.pipeline, spec.limit)
-            else:
-                mongo_rows = self._mongo.find_with_spec(
-                    spec.collection, spec.filter, spec.projection, spec.sort, spec.limit
-                )
-        except Exception as exc:
-            return {
-                "error": f"MongoDB part failed: {exc}",
-                "message": "Hybrid query: MongoDB execution failed.",
-                "hybrid_plan": plan.model_dump(),
-            }
-
-        fused = self._hybrid_exec.fuse(pg_rows, mongo_rows, plan)
-        columns = list(fused[0].keys()) if fused else []
-
-        return {
-            "hybrid_plan": plan.model_dump(),
-            "result_rows": fused,
-            "result_columns": columns,
-            "message": (
-                f"Hybrid query: {len(pg_rows)} PG row(s) + {len(mongo_rows)} Mongo doc(s) "
-                f"→ {len(fused)} fused result(s) via '{plan.join_strategy}'."
-            ),
-        }
+        result = await self._hybrid_exec.execute(
+            nl_query=state["nl_query"],
+            schema_context=schema_context,
+            repair_history=list(state.get("repair_history") or []),
+            repair_attempts=state.get("repair_attempts", 0),
+            max_repair=settings.MAX_REPAIR_ATTEMPTS,
+        )
+        return result
 
     async def _schema_ops(self, state: PipelineState) -> dict:
         """
@@ -596,6 +546,7 @@ class PlannerService:
             "ddl": None,
             "mongo_query_spec": None,
             "hybrid_plan": None,
+            "hybrid_trace": None,
             "viz_spec": None,
             "result_rows": [],
             "result_columns": [],

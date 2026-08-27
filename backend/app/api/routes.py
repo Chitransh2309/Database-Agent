@@ -285,6 +285,7 @@ async def nl_query(
         "ddl": state.get("ddl"),
         "mongo_query_spec": state.get("mongo_query_spec"),
         "hybrid_plan": state.get("hybrid_plan"),
+        "hybrid_trace": state.get("hybrid_trace"),
         "viz_spec": state.get("viz_spec"),
         "result": state.get("result_rows", []),
         "columns": state.get("result_columns", []),

@@ -31,6 +31,8 @@ class ObjectMeta(BaseModel):
                 part += f" FK->{c.fk_to}"
             if not c.nullable:
                 part += " NOT NULL"
+            if c.description:
+                part += f" [{c.description}]"
             col_parts.append(part)
         cols = ", ".join(col_parts)
         return f"{self.source} {kind} {self.name}: ({cols})"

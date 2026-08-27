@@ -17,27 +17,49 @@ Intent selection rules:
   schema_management — alter / drop / rename / modify existing tables or collections
   visualization     — chart / graph / plot / visualize / dashboard
   explanation       — "what tables exist", "describe X", "explain the schema"
-  hybrid_query      — ONLY when the query explicitly requires combining results from BOTH
-                      PostgreSQL AND MongoDB in a single response (e.g. "join orders from
-                      SQL with reviews from MongoDB")
+  hybrid_query      — when answering the query requires data from BOTH PostgreSQL AND MongoDB
+                      to produce a single coherent answer, even without the words "join",
+                      "combine", or "merge"
 
 target_db selection rules:
-  postgresql  — ALL referenced entities live in PostgreSQL; use this by default for relational data
-  mongodb     — ALL referenced entities live in MongoDB; use this for collections/documents
-  both        — ONLY when the response MUST contain joined/correlated data from BOTH sources
+  postgresql  — ALL referenced entities live in PostgreSQL
+  mongodb     — ALL referenced entities live in MongoDB
+  both        — answering the query requires data from BOTH sources
   none        — schema-agnostic (e.g. database_creation, pure explanation)
 
 ROUTING PRIORITY (apply in order — stop at the first rule that matches):
-  1. Identify every table/collection the query references from the schema hint below.
-  2. If all referenced entities are PostgreSQL tables → target_db=postgresql, intent=query/crud/etc.
-  3. If all referenced entities are MongoDB collections → target_db=mongodb, intent=query/crud/etc.
-  4. If entities from BOTH sources are needed AND the user explicitly asks to JOIN or COMBINE them
-     → target_db=both, intent=hybrid_query.
-  5. If unsure which DB an entity belongs to, prefer the DB where the primary entity lives.
+  1. Identify every table/collection the query references or implies from the schema hint below.
+  2. Determine which database(s) contain those entities.
+  3. If all entities are in PostgreSQL → target_db=postgresql, intent=query/crud/etc.
+  4. If all entities are in MongoDB → target_db=mongodb, intent=query/crud/etc.
+  5. If producing the answer REQUIRES data from BOTH databases — even without explicit "join" or
+     "combine" words — then target_db=both, intent=hybrid_query.
+
+     Hybrid is required when ANY of these are true:
+     - The filtering condition references one DB and the desired output columns come from the other
+     - The question asks about customers/users AND their support tickets / reviews / activity
+       where customer data is in PG and behavioral/event/support data is in Mongo
+     - The answer needs aggregation from Mongo (e.g. device sessions) combined with PG records
+     - Answering accurately is impossible from a single database alone
+
+     Hybrid is NOT required when:
+     - The query can be fully answered from one DB (even if the other DB exists)
+     - The query mentions a concept loosely linked to both, but one DB alone suffices
+
+  6. If unsure which DB an entity belongs to, prefer the DB where the primary entity lives.
+
+EXAMPLES — use the schema hint to determine which DB each entity lives in:
+  "Which customers use mobile devices more than desktop?"
+    → if devices/sessions are in MongoDB and customers are in PostgreSQL → hybrid_query, both
+  "Find customers with high purchases who also have open support tickets."
+    → purchases/orders in PostgreSQL, support_tickets in MongoDB → hybrid_query, both
+  "Show customers with open support tickets and their total purchases."
+    → both sources needed → hybrid_query, both
+  "List all customers" → PostgreSQL only → query, postgresql
+  "Show open support tickets" → MongoDB only → query, mongodb
 
 NEVER use target_db=both or intent=hybrid_query just because both databases exist in the system.
-A query about reviews, ratings, logs, or events typically targets MongoDB only.
-A query about users, products, orders, employees, or transactions typically targets PostgreSQL only.
+Do NOT require the words "join", "combine", or "merge" for hybrid classification.
 
 requires_schema:
   true  — needs column names / types / relationships to execute

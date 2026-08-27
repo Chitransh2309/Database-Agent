@@ -26,6 +26,7 @@ class PipelineState(TypedDict):
 
     # ── Populated by hybrid_query node ───────────────────────────────────
     hybrid_plan: Optional[dict]
+    hybrid_trace: Optional[dict]
 
     # ── Populated by execute_sql node (visualization intent only) ─────────
     viz_spec: Optional[dict]
