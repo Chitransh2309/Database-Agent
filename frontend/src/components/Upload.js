@@ -460,6 +460,7 @@ const Upload = ({mode}) => {
       {mode === 1 && queryResult && Array.isArray(queryResult) && queryResult.length > 0 && (
         <div className="query-output-section">
           <h2>Query Result</h2>
+          <div className={`query-table-wrapper${queryResult.length > 50 ? ' query-table-scrollable' : ''}`}>
           <table className="query-result-table">
             <thead>
               <tr>
@@ -478,6 +479,7 @@ const Upload = ({mode}) => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

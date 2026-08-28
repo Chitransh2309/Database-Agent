@@ -37,9 +37,9 @@ ROUTING PRIORITY (apply in order — stop at the first rule that matches):
 
      Hybrid is required when ANY of these are true:
      - The filtering condition references one DB and the desired output columns come from the other
-     - The question asks about customers/users AND their support tickets / reviews / activity
-       where customer data is in PG and behavioral/event/support data is in Mongo
-     - The answer needs aggregation from Mongo (e.g. device sessions) combined with PG records
+     - The question asks about entities AND their associated records / events / documents
+       where entity data is in one DB and the associated records are in the other
+     - The answer needs aggregation from one DB (e.g. event counts, metrics) combined with records from the other
      - Answering accurately is impossible from a single database alone
 
      Hybrid is NOT required when:
@@ -48,15 +48,19 @@ ROUTING PRIORITY (apply in order — stop at the first rule that matches):
 
   6. If unsure which DB an entity belongs to, prefer the DB where the primary entity lives.
 
-EXAMPLES — use the schema hint to determine which DB each entity lives in:
-  "Which customers use mobile devices more than desktop?"
-    → if devices/sessions are in MongoDB and customers are in PostgreSQL → hybrid_query, both
-  "Find customers with high purchases who also have open support tickets."
-    → purchases/orders in PostgreSQL, support_tickets in MongoDB → hybrid_query, both
-  "Show customers with open support tickets and their total purchases."
+EXAMPLES — always consult the schema hint to determine which DB each entity belongs to:
+  Cross-DB (relational entity in PG, activity/events/documents in Mongo):
+    "Which <entities> have more <event_type_A> than <event_type_B>?"
+    → if event data is in MongoDB and the entity table is in PostgreSQL → hybrid_query, both
+  Cross-DB (aggregate filter from PG → detail lookup in Mongo):
+    "Find <entities> with high <metric> that also have <status> <documents>."
+    → if the metric aggregation lives in PostgreSQL and the documents live in MongoDB → hybrid_query, both
+  Cross-DB (enrichment: PG entity + Mongo attribute):
+    "Show <entities> together with their <document_type>."
     → both sources needed → hybrid_query, both
-  "List all customers" → PostgreSQL only → query, postgresql
-  "Show open support tickets" → MongoDB only → query, mongodb
+  Single-DB (all required data in one source):
+    "List all <entities>" where all data is in one DB → query, <that_db>
+    "Show all <status> <documents>" where all data is in one DB → query, <that_db>
 
 NEVER use target_db=both or intent=hybrid_query just because both databases exist in the system.
 Do NOT require the words "join", "combine", or "merge" for hybrid classification.

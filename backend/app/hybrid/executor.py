@@ -22,14 +22,14 @@ Rules for building the hybrid plan:
 
 EXECUTION STRATEGY — choose one:
   "pg_to_mongo":
-    Use when PostgreSQL calculates a subset first (e.g. high-purchase customers, recent orders)
-    and MongoDB must filter by those result IDs (e.g. find open tickets for those customers).
+    Use when PostgreSQL calculates a subset first (e.g. entities above an aggregate threshold,
+    recent transactions) and MongoDB must filter by those result IDs.
     The executor extracts join key values from the PG result and injects them into the Mongo query.
     Write the full PG SQL to produce the source subset.
-    Write the Mongo spec WITHOUT a customer_id filter — executor adds it automatically.
+    Write the Mongo spec WITHOUT a join key filter — executor adds it automatically.
   "mongo_to_pg":
-    Use when MongoDB filters or aggregates first (e.g. customers with mobile > desktop sessions)
-    and PostgreSQL must retrieve details for those IDs.
+    Use when MongoDB filters or aggregates first (e.g. entities matching a document-side condition
+    or array aggregation) and PostgreSQL must retrieve details for those IDs.
     The executor extracts join key values from Mongo and injects them into the PG SQL.
     Write the Mongo spec to produce the filtered subset.
     Write the PG SQL to return ALL rows from the target table — DO NOT filter by join key.
@@ -40,13 +40,14 @@ EXECUTION STRATEGY — choose one:
     Use only when both queries are fully independent and share a join key in both outputs.
 
 JOIN KEYS — always set ALL that apply:
-  pg_join_key: field name in PostgreSQL result for correlation (e.g. "customer_id"). REQUIRED.
-  mongo_join_key: field name in MongoDB result for correlation (e.g. "customer_id"). REQUIRED.
+  pg_join_key: field name in PostgreSQL result for correlation (e.g. the shared entity ID column). REQUIRED.
+  mongo_join_key: field name in MongoDB result for correlation (e.g. the shared entity ID field). REQUIRED.
   join_key: same as both keys when they share a name (set this AND both above).
   Always set pg_join_key and mongo_join_key explicitly — never leave them empty.
   For aggregate pipelines: always include the join key as a NAMED field in $group output.
   Do NOT rely on _id — it is removed from results.
-  In $group, use: "customer_id": {"$first": "$customer_id"}
+  In $group, use: "<join_key_field>": {"$first": "$<join_key_field>"}
+  Replace <join_key_field> with the actual field name from the schema.
 
 STRING MATCHING — CRITICAL:
   Use UPPER() or ILIKE for all status/category/type comparisons to avoid case mismatch:
@@ -54,40 +55,45 @@ STRING MATCHING — CRITICAL:
     o.status ILIKE 'completed'        (PostgreSQL case-insensitive)
   Apply the same to MongoDB: use exact case as documented in the schema (e.g. "Open").
 
-HIGH PURCHASES / HIGH-VALUE / TOP SPENDERS:
-  Interpret as: customers whose completed purchase total is ABOVE the average.
+ABOVE-AVERAGE / HIGH-VALUE / TOP-PERFORMING SUBSET:
+  Interpret phrases like "high purchases", "high-value", "top spenders", "most active",
+  "above average <metric>" as: entities whose aggregate metric exceeds the average across all entities.
   Use execution_strategy="pg_to_mongo".
-  PostgreSQL SQL must compute per-customer total and filter above average:
-    SELECT c.customer_id, c.name, SUM(o.total_amount) AS total_purchase
-    FROM customers c
-    JOIN orders o ON c.customer_id = o.customer_id
-    WHERE UPPER(o.status) = 'COMPLETED'
-    GROUP BY c.customer_id, c.name
-    HAVING SUM(o.total_amount) > (
-      SELECT AVG(t) FROM (
-        SELECT SUM(total_amount) AS t FROM orders
-        WHERE UPPER(status) = 'COMPLETED' GROUP BY customer_id
+  General SQL pattern — replace ALL <placeholders> with actual column names from the schema:
+    SELECT e.<pk_col>, e.<label_col>, SUM(t.<amount_col>) AS total_<metric>
+    FROM <entity_table> e
+    JOIN <fact_table> t ON e.<pk_col> = t.<fk_col>
+    WHERE UPPER(t.<status_col>) = '<COMPLETED_VALUE>'
+    GROUP BY e.<pk_col>, e.<label_col>
+    HAVING SUM(t.<amount_col>) > (
+      SELECT AVG(agg) FROM (
+        SELECT SUM(<amount_col>) AS agg FROM <fact_table>
+        WHERE UPPER(<status_col>) = '<COMPLETED_VALUE>'
+        GROUP BY <fk_col>
       ) sub
     )
-  Adjust column names to match the actual schema.
-  MongoDB spec: find documents in the support collection (no customer_id filter — executor injects it).
+  Derive <entity_table>, <fact_table>, <pk_col>, <fk_col>, <amount_col>, <status_col>,
+  and the completed-status literal from the schema context — never use these placeholder names literally.
+  The MongoDB spec should retrieve documents WITHOUT filtering by the join key — executor injects it.
 
-NESTED ARRAY QUERIES (e.g. devices array with type/sessions sub-fields):
-  Use query_type="aggregate" with an aggregation pipeline.
-  To compare mobile vs desktop sessions in a devices array:
+NESTED ARRAY / SUB-DOCUMENT AGGREGATION:
+  When a collection field is an array of sub-documents, use query_type="aggregate".
+  General pattern for conditional metric comparison across array sub-document categories
+  — replace ALL <placeholders> with actual field names from the schema:
     [
-      {"$unwind": "$devices"},
+      {"$unwind": "$<array_field>"},
       {"$group": {
-        "_id": "$customer_id",
-        "customer_id": {"$first": "$customer_id"},
-        "mobile_sessions": {"$sum": {"$cond": [{"$eq": ["$devices.type", "mobile"]}, "$devices.sessions", 0]}},
-        "desktop_sessions": {"$sum": {"$cond": [{"$eq": ["$devices.type", "desktop"]}, "$devices.sessions", 0]}}
+        "_id": "$<entity_id_field>",
+        "<entity_id_field>": {"$first": "$<entity_id_field>"},
+        "<category_A>_total": {"$sum": {"$cond": [{"$eq": ["$<array_field>.<type_field>", "<value_A>"]}, "$<array_field>.<metric_field>", 0]}},
+        "<category_B>_total": {"$sum": {"$cond": [{"$eq": ["$<array_field>.<type_field>", "<value_B>"]}, "$<array_field>.<metric_field>", 0]}}
       }},
-      {"$match": {"$expr": {"$gt": ["$mobile_sessions", "$desktop_sessions"]}}},
-      {"$project": {"_id": 0, "customer_id": 1, "mobile_sessions": 1, "desktop_sessions": 1}}
+      {"$match": {"$expr": {"$gt": ["$<category_A>_total", "$<category_B>_total"]}}},
+      {"$project": {"_id": 0, "<entity_id_field>": 1, "<category_A>_total": 1, "<category_B>_total": 1}}
     ]
-  Adjust field names to match the actual schema.
-  Use execution_strategy="mongo_to_pg" to then fetch customer details from PostgreSQL.
+  Derive <array_field>, <entity_id_field>, <type_field>, <metric_field>, <value_A>, <value_B>
+  entirely from the schema context — never use placeholder names literally in the generated query.
+  Use execution_strategy="mongo_to_pg" to then fetch entity details from PostgreSQL.
 
 JOIN STRATEGY:
   Use "inner_join" when both sides must have the key (most hybrid queries).
