@@ -320,11 +320,23 @@ select::-webkit-scrollbar-track {
   font-size: 0.95rem;
 }
 
+/* Table Wrapper — always scrollable horizontally; vertically when > 50 rows */
+.query-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  border-radius: 0.5rem;
+}
+
+.query-table-scrollable {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
 /* Table Styling */
 .query-result-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1rem;
+  margin-top: 0;
   background-color: rgba(255, 255, 255, 0.05);
   border-radius: 0.5rem;
   overflow: hidden;
@@ -342,6 +354,9 @@ select::-webkit-scrollbar-track {
   background-color: rgba(114, 137, 218, 0.15);
   color: #a8b2ff;
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .query-result-table tr:hover {
