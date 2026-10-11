@@ -1,3 +1,4 @@
+import json
 from typing import Any, Type
 
 from google import genai
@@ -34,14 +35,28 @@ class GeminiProvider(LLMProvider):
         response_schema: Type[BaseModel],
         system_instruction: str | None = None,
     ) -> Any:
+        """
+        Embeds the JSON Schema in the prompt text rather than passing it as a native
+        `response_schema` to GenerateContentConfig. Gemini's Developer API (free tier)
+        rejects schemas containing free-form `dict[str, Any]` fields (used by Mongo
+        query specs for arbitrary filters/pipelines) with "additionalProperties is only
+        supported in Gemini Enterprise Agent Platform mode" — prompt-based JSON mirrors
+        the approach already used for Bedrock and works around that restriction.
+        """
+        schema_json = json.dumps(self.inline_schema_refs(response_schema.model_json_schema()), indent=2)
+        augmented_prompt = (
+            f"{prompt}\n\n"
+            f"You MUST respond with ONLY valid JSON that exactly matches this JSON Schema "
+            f"(no explanation, no markdown, no code fences):\n{schema_json}"
+        )
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=response_schema,
             system_instruction=system_instruction or "",
         )
         response = await self.client.aio.models.generate_content(
             model=self.model,
-            contents=prompt,
+            contents=augmented_prompt,
             config=config,
         )
-        return response_schema.model_validate_json(response.text)
+        raw = self.strip_code_fences(response.text)
+        return response_schema.model_validate_json(raw)

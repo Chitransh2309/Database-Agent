@@ -5,9 +5,10 @@ class Settings(BaseSettings):
     # ── LLM provider selection ─────────────────────────────────────────────
     LLM_PROVIDER: str = "bedrock"            # "bedrock" | "gemini"
 
-    # ── AWS Bedrock ────────────────────────────────────────────────────────
-    BEDROCK_REGION: str = "ap-south-1"
-    BEDROCK_MODEL_ID: str = "openai.gpt-oss-120b-1:0"
+    # ── AWS Bedrock (via the Bedrock Mantle OpenAI-compatible endpoint) ────
+    BEDROCK_MODEL_ID: str = "openai.gpt-oss-120b"
+    BEDROCK_MANTLE_BASE_URL: str = "https://bedrock-mantle.ap-south-1.api.aws/v1"
+    BEDROCK_MANTLE_API_KEY: str | None = None
 
     # ── Gemini (optional — only needed when LLM_PROVIDER=gemini) ──────────
     GEMINI_API_KEY: str | None = None

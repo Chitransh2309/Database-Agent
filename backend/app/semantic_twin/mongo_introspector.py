@@ -29,13 +29,17 @@ def _infer_fields(docs: list[dict]) -> list[ColumnMeta]:
     """
     Infer field names and types from sample documents.
     For low-cardinality string fields, collect sample values to help the LLM
-    use correct casing (e.g. 'Open' not 'open').
+    use correct casing (e.g. 'Open' not 'open') — including string fields nested
+    inside arrays-of-objects or plain objects (e.g. devices[].type), not just
+    top-level fields. Without this, the LLM has to guess the casing of nested
+    enum-like values and silently produces zero-match queries when it guesses wrong.
     """
     if not docs:
         return []
 
     field_types: dict[str, str] = {}
     field_values: dict[str, set] = {}
+    nested_values: dict[str, dict[str, set]] = {}
 
     for doc in docs:
         for key, value in doc.items():
@@ -43,17 +47,50 @@ def _infer_fields(docs: list[dict]) -> list[ColumnMeta]:
                 field_types[key] = _describe_value(value)
             if isinstance(value, str):
                 field_values.setdefault(key, set()).add(value)
+            elif isinstance(value, list):
+                sub_bucket = nested_values.setdefault(key, {})
+                for item in value:
+                    if isinstance(item, dict):
+                        for sub_key, sub_val in item.items():
+                            if isinstance(sub_val, str):
+                                sub_bucket.setdefault(sub_key, set()).add(sub_val)
+            elif isinstance(value, dict):
+                sub_bucket = nested_values.setdefault(key, {})
+                for sub_key, sub_val in value.items():
+                    if isinstance(sub_val, str):
+                        sub_bucket.setdefault(sub_key, set()).add(sub_val)
 
     columns = []
     for field, ftype in field_types.items():
-        description: str | None = None
         sample_vals = field_values.get(field, set())
         # Show sample values for low-cardinality string fields (≤8 distinct values)
         if ftype == "STRING" and 1 < len(sample_vals) <= 8:
             description = "values: " + ", ".join(sorted(sample_vals))
+        elif field in nested_values:
+            ftype = _annotate_nested_values(ftype, nested_values[field])
+            description = None
+        else:
+            description = None
         columns.append(ColumnMeta(name=field, sql_type=ftype, description=description))
 
     return columns
+
+
+def _annotate_nested_values(ftype: str, sub_values: dict[str, set]) -> str:
+    """
+    Append '(values: ...)' after each low-cardinality string sub-field name inside an
+    ARRAY[{...}] or OBJECT{...} type description, e.g.
+    'ARRAY[{type: STRING, sessions: INTEGER}]' -> 'ARRAY[{type: STRING (values: desktop, mobile), sessions: INTEGER}]'.
+    """
+    for sub_key, vals in sub_values.items():
+        if not (1 < len(vals) <= 8):
+            continue
+        sample = "values: " + ", ".join(sorted(vals))
+        ftype = ftype.replace(
+            f"{sub_key}: STRING",
+            f"{sub_key}: STRING ({sample})",
+        )
+    return ftype
 
 
 def _describe_value(value) -> str:
