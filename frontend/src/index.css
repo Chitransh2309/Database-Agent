@@ -230,26 +230,41 @@ select::-webkit-scrollbar-track {
   position: relative;
   font-family: sans-serif;
   width: 100%;
-  height: 70vh; 
+  min-height: 70vh;
+  padding: 2rem 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
 }
 
 .container .box {
-  width: 100%; 
-  height: 70vh;
-  padding: 1.5rem;
+  width: 100%;
+  max-width: 900px;
+  padding: 2.5rem 3rem;
   background-color: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.3);
   -webkit-backdrop-filter: blur(25px);
   backdrop-filter: blur(25px);
   border-radius: 1rem;
   transition: all ease 0.3s;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+.container .box div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.9rem;
+  width: 100%;
 }
 
 .container .box div p {
-  font-size: 32px;
+  font-size: 18px;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .container .box:hover {
@@ -262,17 +277,16 @@ select::-webkit-scrollbar-track {
 }
 
 #heroBot{
-  animation: slide-bottom 8s;
+  animation: slide-in-right 4s;
 }
 
-@keyframes slide-bottom {
+@keyframes slide-in-right {
   0%{
-    opacity: 0;
+    transform: translateX(200%);
   }
   100%{
-    opacity: 1;
+    transform: translateX(0);
   }
-  
 }
 
 .btn-div{

@@ -14,7 +14,6 @@ const Robot = () => (
         <div key={i} className={`dot dot${i + 1}`} />
       ))}
     </div>
-    <p className="label">AI · PostgreSQL · MongoDB</p>
   </Wrapper>
 );
 
@@ -129,14 +128,6 @@ const Wrapper = styled.div`
   .dot6  { width: 5px;  height: 5px;  background: #FFBF59; top: 55%;  left: 8%;  animation-delay: 1.5s;  }
   .dot7  { width: 8px;  height: 8px;  background: #47C9FF; top: 28%;  left: 14%; animation-delay: 1.8s;  }
   .dot8  { width: 6px;  height: 6px;  background: #FF6464; top: 8%;   left: 30%; animation-delay: 2.1s;  }
-
-  .label {
-    margin-top: 24px;
-    color: #555;
-    font-size: 0.8rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-  }
 `;
 
 export default Robot;

@@ -23,7 +23,7 @@ export default class App extends Component {
             <Route exact path ="/aboutus" element={<About/>}/>
             <Route exact path ="/" element={<div className='d-flex'>
               <div style={{flex:4}}><Herosection/></div>
-              <div style={{flex:3}}><Robot/></div>
+              <div id="heroBot" style={{flex:3}}><Robot/></div>
             </div>}/>
             <Route exact path ="/upload" element={<Upload mode={0}/>}/>
             <Route exact path ="/contact" element={<Contact/>}/>

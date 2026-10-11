@@ -249,7 +249,12 @@ const Upload = ({mode}) => {
       const data = await res.json();
 
       if (res.ok) {
-        setGeneratedSQL(data.sqlQuery || data.sql || "");
+        const generatedQuery =
+          data.sql ||
+          data.ddl ||
+          (data.mongo_query_spec ? JSON.stringify(data.mongo_query_spec, null, 2) : "") ||
+          (data.hybrid_plan ? JSON.stringify(data.hybrid_plan, null, 2) : "");
+        setGeneratedSQL(generatedQuery);
         setQueryResult(data.result || null);
         setVizSpec(data.viz_spec || null);
         setMessage(data.message || "");
@@ -448,7 +453,7 @@ const Upload = ({mode}) => {
 
       {mode === 1 && generatedSQL && (
         <div className="query-output-section">
-          <h2>Generated SQL</h2>
+          <h2>Generated Query</h2>
           <pre className="query-sql-box">{generatedSQL}</pre>
         </div>
       )}
