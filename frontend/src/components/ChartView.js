@@ -10,6 +10,14 @@ import {
 
 const COLORS = ["#FF6464", "#FFBF59", "#47C9FF", "#8884d8", "#82ca9d", "#ff7300"];
 
+// cursor={false} suppresses Recharts' default hover highlight — a grey block
+// behind the hovered bar/slice that clashes with the dark chart surface. The
+// tooltip itself still follows the pointer.
+const TOOLTIP_PROPS = {
+  cursor: false,
+  contentStyle: { background: "#1a1a1a", border: "1px solid #444", color: "#fff" },
+};
+
 const ChartView = ({ vizSpec, data }) => {
   if (!vizSpec || !data || data.length === 0) return null;
 
@@ -23,7 +31,7 @@ const ChartView = ({ vizSpec, data }) => {
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey={x_field} stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
             <YAxis stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
-            <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid #444", color: "#fff" }} />
+            <Tooltip {...TOOLTIP_PROPS} />
             <Legend />
             {y_fields.map((f, i) => (
               <Bar key={f} dataKey={f} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
@@ -37,7 +45,7 @@ const ChartView = ({ vizSpec, data }) => {
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey={x_field} stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
             <YAxis stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
-            <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid #444", color: "#fff" }} />
+            <Tooltip {...TOOLTIP_PROPS} />
             <Legend />
             {y_fields.map((f, i) => (
               <Line
@@ -60,10 +68,7 @@ const ChartView = ({ vizSpec, data }) => {
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey={xKey} name={xKey} stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
             <YAxis dataKey={yKey} name={yKey} stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
-            <Tooltip
-              cursor={{ strokeDasharray: "3 3" }}
-              contentStyle={{ background: "#1a1a1a", border: "1px solid #444", color: "#fff" }}
-            />
+            <Tooltip {...TOOLTIP_PROPS} />
             <Scatter data={data} fill={COLORS[0]} />
           </ScatterChart>
         );
@@ -87,7 +92,7 @@ const ChartView = ({ vizSpec, data }) => {
                 <Cell key={i} fill={COLORS[i % COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid #444", color: "#fff" }} />
+            <Tooltip {...TOOLTIP_PROPS} />
             <Legend />
           </PieChart>
         );
@@ -100,7 +105,7 @@ const ChartView = ({ vizSpec, data }) => {
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey={x_field} stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
             <YAxis stroke="#aaa" tick={{ fill: "#aaa", fontSize: 12 }} />
-            <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid #444", color: "#fff" }} />
+            <Tooltip {...TOOLTIP_PROPS} />
             <Bar dataKey={valKey} fill={COLORS[0]} radius={[4, 4, 0, 0]} />
           </BarChart>
         );
